@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <!-- VIEWPORT: Esencial para dispositivos móviles. 'user-scalable=no' bloquea el zoom 
+         de pellizco en la página para que se comporte como una App Nativa Android/iOS. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- REFRRER-POLICY: Esta es la directiva que le pide permiso al navegador para cargar imágenes
+         desde los servidores de Google (Tu foto de perfil), evitando el "Error 403 Forbidden" -->
+    <meta name="referrer" content="no-referrer">
+    
+    <title>Soterrados IoT | soterradosundac.com</title>
+    
+    <!-- LIBRERÍAS DE CÓDIGO EXTERNAS (CDNs) -->
+    <!-- 1. Leaflet: Motor Geoespacial del Mapa -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- 2. Chart.js: Motor de Gráficos Analíticos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="./dashboard-utils.js"></script>
+    <!-- 3. FontAwesome: Librería de Íconos -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- 4. AdminLTE: framework especializado para paneles administrativos -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2.0/dist/css/adminlte.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2.0/dist/js/adminlte.min.js"></script>
+
+    <style>
+        /* ====================================================================
+           VARIABLES DE DISEÑO (CSS CUSTOM PROPERTIES)
+           Permiten cambiar toda la paleta de colores del proyecto editando solo aquí.
+           ==================================================================== */
+        :root {
+            --primary: #2C3E50; /* Azul oscuro (Marca Institucional) */
+            --secondary: #27AE60; /* Verde (Buen estado) */
+            --danger: #E74C3C; /* Rojo (Estado crítico / Alerta) */
+            --warning: #F1C40F; /* Amarillo (Precaución) */
+            --bg-color: #ECF0F1; /* Color de fondo de la aplicación */
+            --text-color: #333; 
+            --card-bg: #fff;
+            --offline: #95a5a6; /* Gris (Sensores caídos o apagados) */
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* SOLUCIÓN AL "SALTO" DE PANTALLA MÓVIL: Usamos '100dvh' (Dynamic Viewport Height).
+           Evita que el menú del navegador inferior (en Chrome/Safari) oculte nuestra aplicación al hacer scroll. */
+        body { background-color: #f4f6f9; color: var(--text-color); min-height: 100vh; overflow: auto; }
+
+        /* PANTALLA DE INICIO DE SESIÓN */
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; color: white; transition: opacity 0.5s; }
+        .login-box { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; color: var(--text-color); max-width: 400px; width: 90%; }
+        .login-box h1 { margin-bottom: 10px; color: var(--primary); font-size: 26px;}
+        .login-box p { margin-bottom: 30px; color: #7f8c8d; }
+        .login-box i { font-size: 50px; color: var(--secondary); margin-bottom: 20px; }
+
+        /* CONTENEDOR MAESTRO DEL DASHBOARD */
+        #app-container { display: none; width: 100%; min-height: 100vh; }
+        .wrapper { display: flex; min-height: 100vh; }
+        .content-wrapper { flex: 1; min-width: 0; background: var(--bg-color); }
+        #dashboardPage, #photoReportsPage { width: 100%; }
+        #photoReportsPage { display: none; }
+        .content-wrapper section.content { padding-top: 10px; }
+        .main-sidebar { transition: transform 0.3s ease; }
+        .mobile-toggle { display: none; }
+        
+        /* BARRA SUPERIOR EXCLUSIVA PARA MÓVILES */
+        .mobile-header { display: none; background: var(--primary); color: white; padding: 0 20px; align-items: center; justify-content: space-between; z-index: 998; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .hamburger-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 10px;}
+        #mobile-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: rgba(0,0,0,0.5); z-index: 998; }
+
+        /* PANEL LATERAL (SIDEBAR DE NAVEGACIÓN) */
+        .sidebar { width: 250px; background-color: var(--primary); color: white; display: flex; flex-direction: column; padding-top: 20px; z-index: 999; transition: left 0.3s ease; }
+        .sidebar h2 { text-align: center; margin-bottom: 20px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 22px;}
+        
+        /* FOTO DE PERFIL DEL USUARIO */
+        .user-profile { text-align: center; margin-bottom: 20px; padding: 0 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;}
+        .user-profile img { width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px; border: 3px solid var(--secondary); background: white; object-fit: cover;}
+        .user-profile p { font-size: 15px; margin: 0; font-weight: bold;}
+        .user-profile span { font-size: 11px; padding: 3px 10px; border-radius: 15px; margin-top: 5px; display: inline-block; font-weight: bold;}
+        
+        .nav-btn { background: none; border: none; color: white; padding: 15px 20px; text-align: left; font-size: 16px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 10px; }
+        .nav-btn:hover, .nav-btn.active { background-color: rgba(255,255,255,0.1); border-left: 4px solid var(--secondary); }
+        .logout-btn { margin-top: auto; background-color: #c0392b; }
+        
+        .main-content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; position: relative; }
+        
+        /* SISTEMA DE PESTAÑAS (Muestra u Oculta Secciones Enteras) */
+        .tab-content { display: flex; height: auto; flex-direction: column; margin-bottom: 20px; }
+        .tab-content.active { animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* TARJETAS ESTADÍSTICAS SUPERIORES (KPIs) */
+        .stats-header { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: var(--card-bg); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; display: flex; flex-direction: column; justify-content: center;}
+        .stat-card h3 { font-size: 14px; color: #7f8c8d; margin-bottom: 5px; }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: var(--primary); }
+        
+        #map-container { flex: 1; background: var(--card-bg); border-radius: 10px; width: 100%; min-height: 480px; z-index: 1; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; flex: 1; overflow-y: auto;}
+        .chart-box { background: var(--card-bg); padding: 20px; border-radius: 10px; min-height: 350px;}
+        .table-container { background: var(--card-bg); border-radius: 10px; padding: 20px; overflow-x: auto; }
+
+        .photo-marker-icon { background: #ff6b6b; color: white; border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 2px solid #ffffff; box-shadow: 0 0 10px rgba(0,0,0,0.18); }
+        .report-item { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid #e7ecf1; }
+        .report-item:last-child { border-bottom: none; }
+        .report-item img { width: 90px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d9e2; }
+        .report-meta { flex: 1; }
+        .report-meta h5 { margin-bottom: 4px; font-size: 14px; font-weight: 700; }
+        .report-meta p { margin-bottom: 5px; color: #55606e; font-size: 13px; }
+        .report-actions { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+        .status-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+        .status-new { background: #fff3cd; color: #856404; }
+        .status-verified { background: #d4edda; color: #155724; }
+        .guest-banner { background: #fff3cd; border-left: 5px solid #ffeeba; padding: 16px; border-radius: 10px; margin-bottom: 20px; }
+        .guest-banner a { display: inline-flex; align-items: center; gap: 10px; }
+        .focus-highlight { animation: highlightFade 1.8s ease-in-out; }
+        @keyframes highlightFade { 0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.8); } 30% { box-shadow: 0 0 0 18px rgba(56, 189, 248, 0.2); } 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); } }
+
+        table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        
+        /* ETIQUETAS SEMAFÓRICAS (Badges) */
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; color: white; display: inline-block; min-width: 45px; text-align: center;}
+        .bg-green { background-color: var(--secondary); } .bg-yellow { background-color: var(--warning); color: #000; } .bg-red { background-color: var(--danger); } .bg-gray { background-color: var(--offline); } 
+
+        .btn-action { background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; transition: 0.3s; display: inline-flex; align-items: center; gap: 5px;}
+        .btn-action:hover { background: var(--secondary); }
+
+        /* DISEÑO DE LA VISTA DETALLADA DE UN SOTERRADO (Foto y Sensores Individuales) */
+        .single-card { background: var(--card-bg); border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; width: 100%; }
+        .single-card img { width: 100%; height: 250px; object-fit: cover; border-bottom: 4px solid var(--secondary); background: #eee;}
+        .single-card-body { padding: 30px; }
+        .single-card h2 { color: var(--primary); margin-bottom: 10px; font-size: 24px;}
+        .single-card .info-line { display: flex; align-items: center; gap: 10px; color: #7f8c8d; margin-bottom: 15px; font-size: 15px; }
+        .single-card .info-line i { color: var(--secondary); width: 20px; text-align: center; }
+        
+        /* FORMULARIOS DE PANEL DE ADMINISTRADOR */
+        .admin-panel { background: var(--card-bg); padding: 30px; border-radius: 10px; max-width: 600px; margin: 0 auto; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;}
+        .admin-panel input, .admin-panel select { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;}
+        .admin-panel button { background: var(--primary); color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; transition: 0.3s;}
+        .admin-panel button:hover { background: var(--secondary); }
+        .alert-summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+        .summary-pill { padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; }
+        .summary-pill.critical { background: var(--danger); }
+        .summary-pill.warning { background: var(--warning); color: #222; }
+        .summary-pill.offline { background: var(--offline); }
+        .alert-list { list-style: none; display: flex; flex-direction: column; gap: 8px; padding: 0; margin: 0; }
+        .alert-list li { border: 1px solid #e5e7eb; border-left: 4px solid #94a3b8; border-radius: 8px; padding: 10px 12px; font-size: 13px; background: #f8fafc; }
+        .alert-list li.critical { border-left-color: var(--danger); }
+        .alert-list li.warning { border-left-color: var(--warning); }
+        .alert-list li.offline { border-left-color: var(--offline); }
+
+        /* NOTIFICACIONES EMERGENTES (TOASTS) */
+        .toast { position: fixed; top: 20px; right: 20px; background: var(--secondary); color: white; padding: 15px 25px; border-radius: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transform: translateX(150%); transition: transform 0.3s; z-index: 1000; display: flex; align-items: center; gap: 10px;}
+        .toast.show { transform: translateX(0); }
+
+        /* ====================================================================
+           MEDIA QUERIES (DISEÑO RESPONSIVE Y ADAPTATIVO A PANTALLAS MÓVILES)
+           ==================================================================== */
+        @media (max-width: 768px) {
+            .wrapper { flex-direction: column; }
+            .mobile-toggle { display: inline-flex; }
+            .main-sidebar { position: fixed; top: 0; left: 0; height: 100vh; z-index: 1050; transform: translateX(-100%); }
+            .main-sidebar.open { transform: translateX(0); }
+            .content-wrapper { margin-left: 0; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .single-card img { height: 180px; }
+            .single-card-body { padding: 20px; }
+            .admin-panel { padding: 20px; }
+            #map-container { min-height: 300px; }
+        }
+
+        @media (max-width: 480px) {
+            /* REGLA CRÍTICA DE DISEÑO: Forzar una cuadrícula 2x2 para las tarjetas en celulares muy pequeños */
+            .stats-header { grid-template-columns: 1fr 1fr; gap: 10px; } 
+            .stat-card { padding: 15px 10px; }
+            .stat-card h3 { font-size: 11px; }
+            .stat-card .value { font-size: 22px; }
+            .login-box { padding: 20px; }
+            .login-box h1 { font-size: 22px; }
+            .toast { width: 90%; right: 5%; left: 5%; justify-content: center; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <!-- CAJA DE AUTENTICACIÓN LOCAL -->
+    <div id="login-screen">
+        <div class="login-box rounded-3xl shadow-2xl border border-slate-200">
+            <i class="fas fa-leaf text-emerald-500"></i>
+            <h1 class="text-2xl font-semibold">Soterrados IoT</h1>
+            <p>Ingresa tus credenciales para acceder al sistema.</p>
+
+            <form onsubmit="event.preventDefault(); handleLocalLogin();" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+                <input type="text" id="loginUsername" placeholder="Usuario" required style="padding:12px; border:1px solid #ccc; border-radius:8px; font-size:16px;">
+                <input type="password" id="loginPassword" placeholder="Contraseña" required style="padding:12px; border:1px solid #ccc; border-radius:8px; font-size:16px;">
+                <button type="submit" class="btn-action" style="width:100%; justify-content:center;">Iniciar sesión</button>
+            </form>
+
+            <button class="btn-action" onclick="loginAsGuest()" style="width:100%; justify-content:center; background:var(--secondary); margin-bottom:10px;">Entrar como invitado</button>
+            <p style="font-size:13px; margin-top:8px; color:#7f8c8d;">Credenciales demo: usuario <strong>admin</strong> / contraseña <strong>123</strong></p>
+        </div>
+    </div>
+
+    <!-- Telón oscuro que se oscurece detrás del menú en celulares -->
+    <div id="mobile-overlay" onclick="toggleSidebar()"></div>
+
+    <div id="app-container" class="wrapper">
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="#" class="brand-link">
+                <i class="fas fa-leaf brand-image img-circle elevation-3"></i>
+                <span class="brand-text font-weight-light">Soterrados IoT</span>
+            </a>
+            <div class="sidebar">
+                <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+                    <div class="image">
+                        <img src="" id="userPhoto" class="img-circle elevation-2" alt="User Image">
+                    </div>
+                    <div class="info">
+                        <a href="#" id="userName" class="d-block">Cargando...</a>
+                        <span id="userRoleBadge" class="badge badge-success">Usuario</span>
+                    </div>
+                </div>
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+                        <li class="nav-item"><a href="#" class="nav-link" onclick="event.preventDefault(); showMainDashboard()"><i class="nav-icon fas fa-map-marked-alt"></i><p>Ver todo</p></a></li>
+                        <li class="nav-item admin-only"><a href="#" class="nav-link" onclick="event.preventDefault(); openPhotoReportsPage()"><i class="nav-icon fas fa-camera"></i><p>Reportes fotográficos</p></a></li>
+                        <li class="nav-item"><a href="#" class="nav-link" onclick="event.preventDefault(); logout()"><i class="nav-icon fas fa-sign-out-alt"></i><p>Cerrar sesión</p></a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <div id="dashboardPage" class="content-wrapper">
+            <section class="content-header">
+                <div class="container-fluid">
+                    <div class="row mb-2 align-items-center">
+                        <div class="col-sm-6 d-flex align-items-center">
+                            <button class="btn btn-outline-secondary mobile-toggle mr-2" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+                            <h1 class="m-0">Panel de operación</h1>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="content">
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-lg-3 col-6">
+                            <div class="small-box bg-info">
+                                <div class="inner"><h3 id="stat-total">0</h3><p>Total contenedores</p></div>
+                                <div class="icon"><i class="fas fa-trash"></i></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="small-box bg-success">
+                                <div class="inner"><h3 id="stat-online">0</h3><p>En funcionamiento</p></div>
+                                <div class="icon"><i class="fas fa-check-circle"></i></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="small-box bg-warning">
+                                <div class="inner"><h3 id="stat-critical">0</h3><p>Críticos</p></div>
+                                <div class="icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="small-box bg-danger">
+                                <div class="inner"><h3 id="stat-empties">0</h3><p>Vaciados hoy</p></div>
+                                <div class="icon"><i class="fas fa-recycle"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN 1: MAPA Y ALERTAS (LADO A LADO) -->
+                    <div class="row mt-3">
+                        <div class="col-lg-8">
+                            <div id="mapTab" class="tab-content active">
+                                <div class="card card-outline card-primary">
+                                    <div class="card-header"><h3 class="card-title"><i class="fas fa-map-marked-alt"></i> Mapa en vivo</h3></div>
+                                    <div class="card-body p-0">
+                                        <div id="map-container" style="height: 600px; width: 100%;"></div>
+                                    </div>
+                                </div>
+                                <!-- FORMULARIO DE REPORTE FOTOGRÁFICO -->
+                                <div id="photoFormCard" class="card card-outline card-info mt-3">
+                                    <div class="card-header" style="cursor: pointer; background: linear-gradient(to right, #d1ecf1 0%, #fff 100%); user-select: none;" onclick="togglePhotoForm(this)">
+                                        <h3 class="card-title" style="margin: 0;">
+                                            <i class="fas fa-chevron-down photo-toggle-icon" style="margin-right: 10px; transition: transform 0.3s;"></i>
+                                            <i class="fas fa-camera"></i> Reportar con foto
+                                        </h3>
+                                    </div>
+                                    <div id="photoFormContainer" class="card-body" style="display: none;">
+                                        <p class="text-muted text-sm mb-2">Envía una foto desde tu ubicación exacta para reportar un problema.</p>
+                                        <input type="file" id="photoInput" class="form-control mb-2" accept="image/*" placeholder="Selecciona una foto">
+                                        <textarea id="photoDescription" class="form-control mb-2" rows="2" placeholder="Descripción (opcional)"></textarea>
+                                        <button class="btn btn-info btn-block" onclick="uploadPhotoReport()"><i class="fas fa-location-arrow"></i> Obtener ubicación y enviar</button>
+                                        <div id="photoStatus" class="mt-2 text-sm"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div id="guestWhatsAppCard" class="card card-outline card-warning" style="display: none;">
+                                <div class="card-header"><h3 class="card-title"><i class="fab fa-whatsapp"></i> Acceso restringido</h3></div>
+                                <div class="card-body">
+                                    <p class="text-muted">Los invitados no pueden enviar fotografías ni ver alertas, recomendaciones, analíticas o administración.</p>
+                                    <a href="https://wa.me/51940941416?text=Hola%20quisiera%20que%20me%20brinde%20mi%20usuario%20y%20contrase%C3%B1a" target="_blank" class="btn btn-success btn-block"><i class="fab fa-whatsapp"></i> Solicitar usuario por WhatsApp</a>
+                                </div>
+                            </div>
+                            <div id="alertasCard" class="card card-outline card-danger">
+                                <div class="card-header"><h3 class="card-title"><i class="fas fa-exclamation-triangle"></i> Alertas prioritarias</h3></div>
+                                <div class="card-body">
+                                    <div class="alert-summary">
+                                        <span class="summary-pill critical" id="alert-critical-count">0 críticos</span>
+                                        <span class="summary-pill warning" id="alert-warning-count">0 atención</span>
+                                        <span class="summary-pill offline" id="alert-offline-count">0 offline</span>
+                                    </div>
+                                    <ul id="alertList" class="alert-list" style="max-height: 200px; overflow-y: auto;"></ul>
+                                </div>
+                            </div>
+                            <div id="recoCard" class="card card-outline card-warning mt-2">
+                                <div class="card-header"><h3 class="card-title"><i class="fas fa-bullseye"></i> Recomendación operativa</h3></div>
+                                <div class="card-body">
+                                    <div id="recommendedAction" class="text-sm text-slate-700"></div>
+                                </div>
+                            </div>
+                            <div id="routeHealthCard" class="card card-outline card-success mt-2">
+                                <div class="card-header"><h3 class="card-title"><i class="fas fa-route"></i> Estado del recorrido</h3></div>
+                                <div class="card-body">
+                                    <p class="text-sm text-slate-700 mb-2">Las rutas se ajustan automáticamente según los contenedores críticos y la red vial.</p>
+                                    <div id="routeHealth" class="text-sm text-slate-700"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    </div>
+
+                    <div id="detailTab" class="tab-content" style="display: none;">
+                        <div class="card card-outline card-primary">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h3 class="card-title"><i class="fas fa-info-circle"></i> Detalle del contenedor</h3>
+                                <button class="btn btn-secondary btn-sm" onclick="goBack()"><i class="fas fa-arrow-left"></i> Volver</button>
+                            </div>
+                            <div class="card-body" id="singleCardContainer">
+                                <!-- Contenido de detalle cargado dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN 2: LISTA DETALLADA (DESPLEGABLE) -->
+                    <div id="listTab" class="tab-content">
+                        <div class="card card-outline card-success">
+                            <div class="card-header" style="cursor: pointer; background: linear-gradient(to right, #d4edda 0%, #fff 100%); user-select: none;" onclick="toggleListTable(this)">
+                                <h3 class="card-title" style="margin: 0;">
+                                    <i class="fas fa-chevron-down list-toggle-icon" style="margin-right: 10px; transition: transform 0.3s;"></i>
+                                    <i class="fas fa-list"></i> Lista detallada de contenedores
+                                </h3>
+                            </div>
+                            <div id="listTableContainer" class="card-body" style="display: block; max-height: 600px; overflow-y: auto;">
+                                <table class="table table-striped table-bordered" id="containersTable">
+                                    <thead><tr><th>Nombre / ID</th><th>Nivel Promedio</th><th>Secciones (S1-S2-S3)</th><th>Acciones</th></tr></thead>
+                                    <tbody id="tableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN 3: GRÁFICOS ANALÍTICOS -->
+                    <div id="chartsTab" class="tab-content">
+                        <h4 class="mt-3 mb-3"><i class="fas fa-chart-pie"></i> Analíticas</h4>
+                        <div class="row">
+                            <div class="col-lg-3"><div class="card card-outline card-info"><div class="card-header"><h5>Nivel de llenado</h5></div><div class="card-body"><canvas id="fillChart"></canvas></div></div></div>
+                            <div class="col-lg-3"><div class="card card-outline card-info"><div class="card-header"><h5>Secciones</h5></div><div class="card-body"><canvas id="sectionsChart"></canvas></div></div></div>
+                            <div class="col-lg-3"><div class="card card-outline card-info"><div class="card-header"><h5>Estado</h5></div><div class="card-body"><canvas id="statusChart"></canvas></div></div></div>
+                            <div class="col-lg-3"><div class="card card-outline card-info"><div class="card-header"><h5>Tendencia</h5></div><div class="card-body"><canvas id="trendChart"></canvas></div></div></div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN 4: PANEL DE ADMINISTRACIÓN -->
+                    <div id="adminTab" class="tab-content admin-only" style="display: none;">
+                        <h4 class="mt-3 mb-3"><i class="fas fa-cogs"></i> Administración</h4>
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="card card-outline card-info mb-3">
+                                    <div class="card-header"><h3 class="card-title"><i class="fas fa-user-plus"></i> Crear nuevo usuario</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-muted">Agrega un nuevo usuario con credenciales personalizadas.</p>
+                                        <input type="text" id="newUsername" class="form-control mb-2" placeholder="Nombre de usuario">
+                                        <input type="password" id="newPassword" class="form-control mb-2" placeholder="Contraseña">
+                                        <select id="newUserRole" class="form-control mb-2">
+                                            <option value="user">Usuario Estándar</option>
+                                            <option value="guest">Invitado</option>
+                                            <option value="admin">Administrador</option>
+                                        </select>
+                                        <button class="btn btn-info btn-block" onclick="createNewUser()"><i class="fas fa-user-check"></i> Crear usuario</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card card-outline card-success">
+                                    <div class="card-header"><h3 class="card-title"><i class="fas fa-edit"></i> Información del contenedor</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-muted">Asigna una dirección y una fotografía a cada contenedor.</p>
+                                        <select id="infoContainerSelect" class="form-control mb-2"><option value="">Cargando contenedores...</option></select>
+                                        <input type="text" id="newAddress" class="form-control mb-2" placeholder="Dirección (Ej. Av. Los Próceres)">
+                                        <input type="text" id="newPhotoUrl" class="form-control mb-2" placeholder="URL de la Foto">
+                                        <button class="btn btn-success btn-block" onclick="updateContainerInfo()"><i class="fas fa-save"></i> Guardar información</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card card-outline card-primary mt-3">
+                            <div class="card-header"><h3 class="card-title"><i class="fas fa-route"></i> Generador de rutas alternativas</h3></div>
+                            <div class="card-body">
+                                <p class="text-muted">Crea rutas inteligentes que prioricen los contenedores más llenos y optimicen el recorrido.</p>
+                                <div class="row">
+                                    <div class="col-md-6"><select id="routeSectorSelect" class="form-control mb-2"><option value="all">Todos los sectores</option><option value="Sector Norte-Oeste">Sector Norte-Oeste</option><option value="Sector Norte-Este">Sector Norte-Este</option><option value="Sector Sur-Oeste">Sector Sur-Oeste</option><option value="Sector Sur-Este">Sector Sur-Este</option></select></div>
+                                    <div class="col-md-6"><input type="number" id="routeStopsInput" class="form-control mb-2" value="8" min="3" max="15" placeholder="Cantidad de paradas"></div>
+                                </div>
+                                <button class="btn btn-primary btn-block" onclick="generateAlternativeRoute()"><i class="fas fa-magic"></i> Generar ruta recomendada</button>
+                                <div id="routeSummary" class="mt-3 alert alert-light border"></div>
+                            </div>
+                        </div>
+                        <div class="card card-outline card-warning mt-3 admin-only">
+                            <div class="card-header"><h3 class="card-title"><i class="fas fa-bolt"></i> Simulador de datos</h3></div>
+                            <div class="card-body">
+                                <p class="text-muted">Genera lecturas de sensores desde Cloudflare y actualiza los contenedores en el mapa.</p>
+                                <div class="form-row align-items-center">
+                                    <div class="col-md-4">
+                                        <input type="number" id="simulatorCountInput" class="form-control mb-2" min="1" max="10" value="3" />
+                                    </div>
+                                    <div class="col-md-8">
+                                        <button class="btn btn-warning btn-block" onclick="runSimulator()"><i class="fas fa-play"></i> Ejecutar simulador</button>
+                                    </div>
+                                </div>
+                                <div id="simulatorResult" class="mt-2 text-sm text-muted"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div id="photoReportsPage" class="content-wrapper" style="display: none;">
+                <section class="content-header">
+                    <div class="container-fluid">
+                        <div class="row mb-2 align-items-center">
+                            <div class="col-sm-6 d-flex align-items-center">
+                                <button class="btn btn-outline-secondary mobile-toggle mr-2" onclick="showMainDashboard()"><i class="fas fa-arrow-left"></i></button>
+                                <h1 class="m-0">Reportes fotográficos</h1>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section class="content">
+                    <div class="container-fluid">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card card-outline card-info">
+                                    <div class="card-header"><h3 class="card-title"><i class="fas fa-camera"></i> Revisión de reportes fotográficos</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-sm text-muted mb-3">Aquí puedes ver los reportes individuales de imágenes, aceptar que el recolector pasó, archivarlos o eliminarlos.</p>
+                                        <div id="photoReportsSummary" class="mb-2 text-sm text-muted"></div>
+                                        <div id="photoReportsList" style="max-height: 680px; overflow-y: auto;"></div>
+                                        <div id="photoReportsEmpty" class="text-muted" style="display:none;">No hay reportes todavía.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+    <!-- Contenedor general del Toast (Aviso en esquina superior derecha) -->
+    <div id="toast" class="toast"><i class="fas fa-info-circle"></i> <span id="toastMsg">Notificación</span></div>
+
+    <!-- ====================================================================
+         LÓGICA DEL CLIENTE (JAVASCRIPT)
+         ==================================================================== -->
+    <script>
+        let API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')
+            ? 'http://127.0.0.1:8787/api'
+            : 'https://soterrados-api-production.iotsoterrados.workers.dev/api';
+        if(API_BASE.endsWith('/')) API_BASE = API_BASE.slice(0, -1);
+        
+        let map, containersData = {}, markers = {}; 
+        let layerControl, currentUser = null, previousTab = 'mapTab'; 
+        let fillChart, sectionsChart, statusChart, trendChart;
+        let refreshTimer = null;
+        let liveStreamReconnectTimer = null;
+        let generatedRouteLayer = null;
+        let liveStream = null;
+        let roadGraph = new Map();
+        let roadGraphLoaded = false;
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.main-sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            if (!sidebar) return;
+            sidebar.classList.toggle('open');
+            const isOpen = sidebar.classList.contains('open');
+            if (overlay) overlay.style.display = isOpen ? 'block' : 'none';
+        }
+
+        // ==========================================
+        // LÓGICA DE AUTENTICACIÓN LOCAL
+        // ==========================================
+        function handleLocalLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            // Verificar usuarios predefinidos
+            if (username === 'admin' && password === '123') {
+                currentUser = { name: 'Administrador', username, email: 'admin@local', role: 'admin', picture: '', token: 'local-admin-token' };
+            } else if (username === 'invitado' || username === 'guest') {
+                currentUser = { name: 'Invitado', username, email: 'guest@local', role: 'guest', picture: '', token: 'guest-token' };
+            } else {
+                // Verificar usuarios creados en localStorage
+                const users = JSON.parse(localStorage.getItem('ecotrack_users') || '{}');
+                if (users[username] && users[username].password === password) {
+                    const role = users[username].role || 'user';
+                    currentUser = { name: username, username, email: `${username}@local`, role, picture: '', token: `token-${username}` };
+                } else {
+                    showToast('Credenciales incorrectas. Usa admin / 123 o un usuario creado.', true);
+                    return;
+                }
+            }
+
+            localStorage.setItem('ecotrack_user', JSON.stringify(currentUser));
+            setupAppForUser();
+            showToast(`¡Bienvenido, ${currentUser.name}!`);
+        }
+
+        function loginAsGuest() {
+            currentUser = { name: 'Invitado', username: 'invitado', email: 'guest@local', role: 'guest', picture: '', token: 'guest-token' };
+            localStorage.setItem('ecotrack_user', JSON.stringify(currentUser));
+            setupAppForUser();
+            showToast('Bienvenido, invitado.');
+        }
+
+        function showLoginScreen() {
+            const loginScreen = document.getElementById('login-screen');
+            const appContainer = document.getElementById('app-container');
+            if (loginScreen) {
+                loginScreen.style.display = 'flex';
+                loginScreen.style.opacity = '1';
+            }
+            if (appContainer) {
+                appContainer.style.display = 'none';
+            }
+        }
+
+        // Revisa la memoria local (LocalStorage) al entrar a la página
+        function checkSession() {
+            const saved = localStorage.getItem('ecotrack_user');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && parsed.username && parsed.role) {
+                        currentUser = parsed;
+                        setupAppForUser();
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('Sesión inválida en localStorage, limpiando.', err);
+                }
+            }
+
+            // Si no hay sesión válida, muestra el login y no inicia como invitado automáticamente.
+            showLoginScreen();
+        }
+
+        // Destapa la interfaz, inserta los datos del usuario y dibuja botones ocultos
+        function buildAvatarDataUrl(role) {
+            const label = role === 'admin' ? 'AD' : 'US';
+            const color = role === 'admin' ? '#e74c3c' : '#27ae60';
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" rx="60" fill="${color}"/><circle cx="60" cy="50" r="24" fill="#ffffff"/><path d="M28 102c8-18 24-28 32-28s24 10 32 28" fill="#ffffff"/></svg>`;
+            return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+        }
+
+        function updateUserAvatar() {
+            const avatar = document.getElementById('userPhoto');
+            if (!avatar) return;
+            const avatarSrc = currentUser?.picture && currentUser.picture.trim() ? currentUser.picture : buildAvatarDataUrl(currentUser?.role || 'user');
+            avatar.src = avatarSrc;
+            avatar.onerror = () => {
+                avatar.src = buildAvatarDataUrl(currentUser?.role || 'user');
+            };
+        }
+
+        function setupAppForUser() {
+            // Animación de Desvanecimiento (Fade-out)
+            document.getElementById('login-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'flex';
+                if(map) {
+                    setTimeout(() => map.invalidateSize(), 150);
+                }
+            }, 500);
+            
+            document.getElementById('userName').innerText = currentUser.name;
+            updateUserAvatar();
+            
+            const roleBadge = document.getElementById('userRoleBadge');
+            const chartsTab = document.getElementById('chartsTab');
+            const adminTab = document.getElementById('adminTab');
+            const photoFormCard = document.getElementById('photoFormCard');
+            const guestWhatsAppCard = document.getElementById('guestWhatsAppCard');
+            const alertasCard = document.getElementById('alertasCard');
+            const recoCard = document.getElementById('recoCard');
+            const routeHealthCard = document.getElementById('routeHealthCard');
+            
+            // VERIFICACIÓN DE CONTROL DE ACCESO AL DASHBOARD (RBAC)
+            if(currentUser.role === 'admin') {
+                roleBadge.innerText = "Administrador";
+                roleBadge.style.background = "var(--danger)"; // Rojo = Poder
+                document.getElementById('userPhoto').style.borderColor = "var(--danger)";
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+                if (chartsTab) chartsTab.style.display = 'flex';
+                if (adminTab) adminTab.style.display = 'flex';
+                if (photoFormCard) photoFormCard.style.display = 'block';
+                if (guestWhatsAppCard) guestWhatsAppCard.style.display = 'none';
+                if (alertasCard) alertasCard.style.display = 'block';
+                if (recoCard) recoCard.style.display = 'block';
+                if (routeHealthCard) routeHealthCard.style.display = 'block';
+            } else if(currentUser.role === 'guest') {
+                roleBadge.innerText = "Invitado";
+                roleBadge.style.background = "var(--warning)";
+                roleBadge.style.color = "#000";
+                document.getElementById('userPhoto').style.borderColor = "var(--warning)";
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+                if (chartsTab) chartsTab.style.display = 'none';
+                if (adminTab) adminTab.style.display = 'none';
+                if (photoFormCard) photoFormCard.style.display = 'none';
+                if (guestWhatsAppCard) guestWhatsAppCard.style.display = 'block';
+                if (alertasCard) alertasCard.style.display = 'none';
+                if (recoCard) recoCard.style.display = 'none';
+                if (routeHealthCard) routeHealthCard.style.display = 'none';
+            } else {
+                roleBadge.innerText = "Usuario Estandar";
+                roleBadge.style.background = "var(--secondary)"; // Verde = Observador
+                document.getElementById('userPhoto').style.borderColor = "var(--secondary)";
+                if (chartsTab) chartsTab.style.display = 'flex';
+                if (adminTab) adminTab.style.display = 'none';
+                if (photoFormCard) photoFormCard.style.display = 'block';
+                if (guestWhatsAppCard) guestWhatsAppCard.style.display = 'none';
+                if (alertasCard) alertasCard.style.display = 'block';
+                if (recoCard) recoCard.style.display = 'block';
+                if (routeHealthCard) routeHealthCard.style.display = 'block';
+            }
+
+            // INICIALIZA LOS MOTORES VISUALES
+            if(!map) {
+                initMap(); initCharts(); fetchRoutesAndDraw(); fetchRealTimeData(); loadPhotoReports();
+                // POLLING: actualiza la data con menor frecuencia para evitar el refresco excesivo
+                if (refreshTimer) clearInterval(refreshTimer);
+                refreshTimer = setInterval(fetchRealTimeData, 15000);
+                // Polling de fotos cada 30 segundos
+                setInterval(loadPhotoReports, 30000);
+            }
+
+        }
+
+        function logout() {
+            localStorage.removeItem('ecotrack_user');
+            currentUser = null;
+            showLoginScreen();
+            showToast('Sesión cerrada. Ingresa nuevamente.', false);
+        }
+
+        // ==========================================
+        // FUNCIONES DE REPORTES FOTOGRÁFICOS
+        // ==========================================
+        
+        function togglePhotoForm(headerElement) {
+            const icon = headerElement.querySelector('.photo-toggle-icon');
+            const container = document.getElementById('photoFormContainer');
+            const isHidden = container.style.display === 'none';
+            
+            container.style.display = isHidden ? 'block' : 'none';
+            icon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-180deg)';
+        }
+
+        async function uploadPhotoReport() {
+            const photoInput = document.getElementById('photoInput');
+            const description = document.getElementById('photoDescription').value;
+            const statusDiv = document.getElementById('photoStatus');
+            const username = currentUser?.username || currentUser?.email || 'invitado';
+
+            if (currentUser?.role === 'guest') {
+                statusDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times"></i> Invitados no pueden enviar reportes fotográficos.</span>';
+                return;
+            }
+
+            if (!photoInput.files.length) {
+                statusDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times"></i> Selecciona una foto primero</span>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Obteniendo ubicación...</span>';
+
+            // Obtener geolocalización
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude } = position.coords;
+                    
+                    // Leer archivo como base64
+                    const file = photoInput.files[0];
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        const photoBase64 = e.target.result; // Ya es data:image/...;base64,...
+                        
+                        statusDiv.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Enviando foto...</span>';
+
+                        try {
+                            const response = await fetch(API_BASE + '/photo-reports', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    username,
+                                    latitude,
+                                    longitude,
+                                    photoBase64,
+                                    description
+                                })
+                            });
+                            
+                            const data = await response.json();
+                            if (data.success) {
+                                statusDiv.innerHTML = '<span class="text-success"><i class="fas fa-check-circle"></i> ✅ Foto subida exitosamente</span>';
+                                photoInput.value = '';
+                                document.getElementById('photoDescription').value = '';
+                                setTimeout(() => statusDiv.innerHTML = '', 3000);
+                                // Recargar fotos en el mapa
+                                loadPhotoReports();
+                            } else {
+                                statusDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times"></i> Error: ${data.error}</span>`;
+                            }
+                        } catch (error) {
+                            statusDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times"></i> Error de conexión</span>`;
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                },
+                (error) => {
+                    statusDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times"></i> Activa el GPS en tu dispositivo</span>';
+                }
+            );
+        }
+
+        async function loadPhotoReports() {
+            try {
+                const statusQuery = currentUser?.role === 'admin' ? '?status=all' : '';
+                const response = await fetch(API_BASE + '/photo-reports' + statusQuery, {
+                    headers: getAdminHeaders()
+                });
+                const data = await response.json();
+                
+                if (data.success && data.reports) {
+                    window.photoReports = data.reports;
+
+                    // Limpiar marcadores de fotos anteriores
+                    if (window.photoMarkers) {
+                        window.photoMarkers.forEach(marker => map.removeLayer(marker));
+                    }
+                    window.photoMarkers = [];
+
+                    // Agregar nuevos marcadores solo para fotos aprobadas
+                    data.reports.filter(report => report.status === 'approved').forEach(report => {
+                        const photoMarker = L.marker(
+                            [report.latitude, report.longitude],
+                            { icon: createPhotoMarkerIcon() }
+                        ).addTo(map);
+
+                        photoMarker.on('click', async () => {
+                            try {
+                                const fullResponse = await fetch(API_BASE + `/photo-reports/${report.id}`);
+                                const fullData = await fullResponse.json();
+                                if (fullData.success && fullData.report.photo_data) {
+                                    const photoHtml = `
+                                        <div style="text-align: center;">
+                                            <p><strong>${report.username}</strong> - ${new Date(report.created_at).toLocaleString()}</p>
+                                            <span class="status-pill status-verified">Aprobado</span>
+                                            <img src="${fullData.report.photo_data}" style="width: 300px; height: 250px; object-fit: cover; border-radius: 8px; margin: 10px 0;">
+                                            ${report.description ? `<p style="font-style: italic; color: #666;">${report.description}</p>` : ''}
+                                            <p style="font-size: 0.85em; color: #999;">Lat: ${report.latitude.toFixed(5)} | Lon: ${report.longitude.toFixed(5)}</p>
+                                        </div>
+                                    `;
+                                    photoMarker.bindPopup(photoHtml, { maxWidth: 350 }).openPopup();
+                                }
+                            } catch (e) {
+                                console.error('Error loading photo:', e);
+                            }
+                        });
+
+                        photoMarker.bindTooltip(`📸 Foto de ${report.username}`, { permanent: false });
+                        window.photoMarkers.push(photoMarker);
+                    });
+
+                    showPhotoReports(data.reports);
+                }
+            } catch (error) {
+                console.error('Error loading photo reports:', error);
+            }
+        }
+
+        function createPhotoMarkerIcon() {
+            return L.divIcon({
+                className: 'photo-marker-icon',
+                html: '<i class="fas fa-camera"></i>',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18],
+                popupAnchor: [0, -18]
+            });
+        }
+
+        function getConfirmedReports() {
+            return JSON.parse(localStorage.getItem('ecotrack_confirmed_reports') || '[]');
+        }
+
+        function isReportConfirmed(reportId) {
+            const confirmed = getConfirmedReports();
+            return confirmed.includes(Number(reportId));
+        }
+
+        function confirmPhotoReport(reportId) {
+            const confirmed = getConfirmedReports();
+            const id = Number(reportId);
+            if (!confirmed.includes(id)) {
+                confirmed.push(id);
+                localStorage.setItem('ecotrack_confirmed_reports', JSON.stringify(confirmed));
+                showPhotoReports(window.photoReports || []);
+                showToast('Reporte marcado como real y verificado.', false);
+            }
+        }
+
+        function getAdminHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            if (currentUser?.role === 'admin') {
+                headers['X-Local-Admin-Token'] = 'local-admin-token';
+            }
+            return headers;
+        }
+
+        async function approvePhotoReport(reportId) {
+            try {
+                const response = await fetch(API_BASE + `/photo-reports/${reportId}/approve`, {
+                    method: 'POST',
+                    headers: getAdminHeaders()
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Reporte aprobado y ahora visible en el mapa.', false);
+                    loadPhotoReports();
+                } else {
+                    showToast(data.error || 'No se pudo aprobar.', true);
+                }
+            } catch (error) {
+                showToast('Error de conexión al aprobar.', true);
+            }
+        }
+
+        async function archivePhotoReport(reportId) {
+            try {
+                const response = await fetch(API_BASE + `/photo-reports/${reportId}/archive`, {
+                    method: 'POST',
+                    headers: getAdminHeaders()
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Reporte archivado como recolector pasado.', false);
+                    loadPhotoReports();
+                } else {
+                    showToast(data.error || 'No se pudo archivar.', true);
+                }
+            } catch (error) {
+                showToast('Error de conexión al archivar.', true);
+            }
+        }
+
+        async function deletePhotoReport(reportId) {
+            if (!confirm('¿Eliminar este reporte de foto? Esta acción no se puede deshacer.')) return;
+            try {
+                const response = await fetch(API_BASE + `/photo-reports/${reportId}`, {
+                    method: 'DELETE',
+                    headers: getAdminHeaders()
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Reporte eliminado correctamente.', false);
+                    loadPhotoReports();
+                } else {
+                    showToast(data.error || 'No se pudo eliminar.', true);
+                }
+            } catch (error) {
+                showToast('Error de conexión al eliminar.', true);
+            }
+        }
+
+        async function runSimulator() {
+            const countInput = document.getElementById('simulatorCountInput');
+            const resultDiv = document.getElementById('simulatorResult');
+            if (!countInput || !resultDiv) return;
+
+            const count = Number(countInput.value) || 3;
+            resultDiv.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Ejecutando simulador...</span>';
+
+            try {
+                const response = await fetch(API_BASE + `/simulator/run?count=${count}`, {
+                    method: 'POST',
+                    headers: { 'X-Local-Admin-Token': 'local-admin-token' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    resultDiv.innerHTML = `<span class="text-success"><i class="fas fa-check-circle"></i> Simulación ejecutada. ${data.simulated?.length || 0} contenedor(es) actualizados.</span>`;
+                    loadPhotoReports();
+                    fetchRealTimeData();
+                    setTimeout(() => {
+                        resultDiv.innerHTML = '';
+                    }, 6000);
+                } else {
+                    resultDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> ${data.error || 'Error al ejecutar simulador.'}</span>`;
+                }
+            } catch (error) {
+                console.error('Simulador error:', error);
+                resultDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle"></i> Error de conexión al simulador.</span>';
+            }
+        }
+
+        function showPhotoReports(reports) {
+            const container = document.getElementById('photoReportsList');
+            const summary = document.getElementById('photoReportsSummary');
+            const empty = document.getElementById('photoReportsEmpty');
+            if (!container || !summary || !empty) return;
+
+            if (!reports || reports.length === 0) {
+                summary.innerText = 'No hay reportes fotográficos en este momento.';
+                container.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+
+            empty.style.display = 'none';
+            const approvedCount = reports.filter(r => r.status === 'approved').length;
+            const pendingCount = reports.filter(r => r.status === 'new').length;
+            const resolvedCount = reports.filter(r => r.status === 'resolved').length;
+            const confirmed = getConfirmedReports();
+            if (currentUser?.role === 'admin') {
+                summary.innerText = `${reports.length} reporte(s) recibido(s). ${approvedCount} aprobado(s), ${pendingCount} pendiente(s), ${resolvedCount} archivado(s).`;
+            } else {
+                summary.innerText = `${approvedCount} reporte(s) aprobado(s) visible(s) en el mapa.`;
+            }
+            container.innerHTML = '';
+
+            reports.forEach(report => {
+                const item = document.createElement('div');
+                item.className = 'report-item';
+                const imgSrc = report.photo_data ? report.photo_data : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAASElEQVR4Xu3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAcgJ4AAGP7B7cAAAAAElFTkSuQmCC';
+                const resolved = report.status === 'resolved';
+                const confirmedLocal = isReportConfirmed(report.id);
+                item.innerHTML = `
+                    <img src="${imgSrc}" alt="Reporte foto">
+                    <div class="report-meta">
+                        <h5>${report.username}</h5>
+                        <p>${report.description || 'Sin descripción'}</p>
+                        <p style="font-size:12px; color:#7a869a;">${new Date(report.created_at).toLocaleString()}</p>
+                        <p style="font-size:12px; color:#7a869a;">Lat: ${report.latitude.toFixed(5)} · Lon: ${report.longitude.toFixed(5)}</p>
+                    </div>
+                    <div class="report-actions">
+                        <span class="status-pill ${resolved ? 'status-verified' : (report.status === 'approved' ? 'status-verified' : 'status-new')}">${resolved ? 'Archivado' : (report.status === 'approved' ? 'Aprobado' : 'Pendiente')}</span>
+                        ${currentUser?.role === 'admin' ? `
+                            ${report.status === 'new' ? `<button class="btn btn-sm btn-success" onclick="approvePhotoReport(${report.id})">Aprobar</button>` : ''}
+                            ${report.status !== 'resolved' ? `<button class="btn btn-sm btn-info" onclick="archivePhotoReport(${report.id})">Archivar</button>` : ''}
+                            <button class="btn btn-sm btn-danger" onclick="deletePhotoReport(${report.id})">Eliminar</button>
+                        ` : '' }
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // ==========================================
+        // FUNCIONES DE PANEL DE ADMINISTRADOR (CON TOKEN)
+        // ==========================================
+        
+        function toggleListTable(headerElement) {
+            const icon = headerElement.querySelector('.list-toggle-icon');
+            const container = document.getElementById('listTableContainer');
+            const isHidden = container.style.display === 'none';
+            
+            container.style.display = isHidden ? 'block' : 'none';
+            icon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-180deg)';
+        }
+
+        function createNewUser() {
+            const username = document.getElementById('newUsername').value.trim();
+            const password = document.getElementById('newPassword').value;
+            const role = document.getElementById('newUserRole').value;
+            
+            if (!username || !password) {
+                showToast('Ingresa usuario y contraseña', true);
+                return;
+            }
+            
+            // Guardar en localStorage (para demo local)
+            const users = JSON.parse(localStorage.getItem('ecotrack_users') || '{}');
+            
+            if (users[username]) {
+                showToast(`El usuario "${username}" ya existe.`, true);
+                return;
+            }
+            
+            users[username] = { password, role };
+            localStorage.setItem('ecotrack_users', JSON.stringify(users));
+            
+            showToast(`✅ Usuario "${username}" creado como ${role}`, false);
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('newUserRole').value = 'user';
+        }
+
+        async function updateContainerInfo() {
+            const id = document.getElementById('infoContainerSelect').value;
+            const address = document.getElementById('newAddress').value;
+            const photoUrl = document.getElementById('newPhotoUrl').value;
+            
+            if(!id) return showToast("Selecciona un contenedor primero.", true);
+
+            if(currentUser?.token === 'local-admin-token') {
+                if(containersData[id]) {
+                    containersData[id].address = address || containersData[id].address;
+                    containersData[id].photo_url = photoUrl || containersData[id].photo_url;
+                    updateTable();
+                    updateMarkerOnMap(containersData[id]);
+                }
+                showToast('Información actualizada localmente.', false);
+                document.getElementById('newAddress').value = ''; document.getElementById('newPhotoUrl').value = '';
+                return;
+            }
+
+            const res = await fetch(API_BASE + '/containers/update-info', {
+                method: 'POST', 
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${currentUser.token}`
+                },
+                body: JSON.stringify({ id, address, photoUrl })
+            });
+            const data = await res.json();
+            showToast(data.message || data.error, !data.success);
+            document.getElementById('newAddress').value = ''; document.getElementById('newPhotoUrl').value = '';
+            fetchRealTimeData();
+        }
+
+        // ==========================================
+        // MAPA LEAFLET Y GEOJSON
+        // ==========================================
+        function initMap() {
+            // LÍMITES ESTRICTOS DEL MAPA (Región de Pasco)
+            const pascoBounds = [[-11.50, -77.00], [-9.50, -74.50]];
+            map = L.map('map-container', {
+                maxBounds: pascoBounds,
+                maxBoundsViscosity: 1.0,
+                minZoom: 8
+            }).setView([-10.6678, -76.2566], 14);
+
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Inicializamos el control de capas vacío. Las rutas se agregarán aquí dinámicamente.
+            layerControl = L.control.layers(null, null, {position: 'topright'}).addTo(map);
+        }
+
+        function isOffline(lastUpdated) { return (!lastUpdated) || (Date.now() - new Date(lastUpdated + 'Z').getTime()) > 35000; }
+        
+        // Define el Color del Marcador según sus niveles (Reglas de Negocio)
+        function getColorForLevel(level, lastUpdated) {
+            if (isOffline(lastUpdated)) return 'var(--offline)'; // Gris
+            if (level < 40) return 'var(--secondary)'; // Verde
+            if (level <= 70) return 'var(--warning)'; // Amarillo
+            return 'var(--danger)'; // Rojo Fuerte (Emergencia)
+        }
+
+        // Actualiza el círculo de Leaflet optimizando Memoria RAM (Update in Place)
+        function updateMarkerOnMap(c) {
+            if (!c.lat || !c.lng) return;
+            const color = getColorForLevel(c.current_fill_level, c.last_updated);
+            if (markers[c.id]) {
+                // Si el punto existe en el mapa, solo lo "repintamos" en vez de destruirlo y crear otro
+                markers[c.id].setStyle({ fillColor: color, color: color });
+                markers[c.id].setPopupContent(createPopupHTML(c));
+            } else {
+                // Instanciación
+                const marker = L.circleMarker([c.lat, c.lng], { radius: 12, fillColor: color, color: color, weight: 2, opacity: 1, fillOpacity: 0.7 }).addTo(map);
+                marker.bindPopup(createPopupHTML(c));
+                markers[c.id] = marker; 
+            }
+        }
+
+        function createPopupHTML(c) {
+            return `
+                <div style="font-family:sans-serif; min-width: 160px; text-align:center;">
+                    <h3 style="margin-bottom:10px; color:#2C3E50; font-size:16px;">${c.name || c.id}</h3>
+                    <div style="background:#f8f9fa; padding:8px; border-radius:5px; margin-bottom:15px;">
+                        <p style="margin:0; font-weight:bold; font-size:14px;">Llenado: <span style="color:${getColorForLevel(c.current_fill_level, c.last_updated)}">${Math.round(c.current_fill_level || 0)}%</span></p>
+                    </div>
+                    <button class="btn-action" onclick="viewContainerCard('${c.id}')"><i class="fas fa-eye"></i> Ver más</button>
+                </div>`;
+        }
+
+        // CARGA ÚNICA DE RUTAS CONSOLIDADAS PARA EVITAR ERRORES 404 Y REINTENTOS INNECESARIOS
+        async function fetchRoutesAndDraw() {
+            try {
+                const response = await fetch('./rutas-combinadas.geojson');
+                if (!response.ok) throw new Error(`No se pudo cargar rutas-combinadas.geojson (${response.status})`);
+
+                const rutasData = await response.json();
+                const features = rutasData.features || [];
+                const routeColors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe'];
+
+                const routeGroups = new Map();
+                features.forEach((feature) => {
+                    const props = feature.properties || {};
+                    const routeIndex = props.routeIndex || 1;
+                    const routeKey = `Ruta ${routeIndex}`;
+                    if (!routeGroups.has(routeKey)) routeGroups.set(routeKey, []);
+                    routeGroups.get(routeKey).push(feature);
+                });
+
+                const sortedRoutes = Array.from(routeGroups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+                sortedRoutes.forEach(([routeName, routeFeatures], index) => {
+                    const routeLayer = L.geoJSON({ type: 'FeatureCollection', name: routeName, features: routeFeatures }, {
+                        style: { color: routeColors[index % routeColors.length], weight: 5, opacity: 0.7 },
+                        onEachFeature: (feature, layer) => {
+                            const prop = feature.properties || {};
+                            layer.bindPopup(`<div style="font-size:13px;"><h3 style="color:var(--primary); margin-bottom:8px;"><i class="fas fa-truck"></i> ${routeName}</h3><p style="margin-bottom:4px;"><b>📍 Ruta:</b> ${prop.routeName || routeName}</p><p style="margin-bottom:0;"><b>🧭 ID:</b> ${prop.routeId || 'N/A'}</p></div>`);
+                        }
+                    });
+
+                    routeLayer.addTo(map);
+                    layerControl.addOverlay(routeLayer, `🚚 ${routeName}`);
+                    buildRoadGraphFromGeojson({ type: 'FeatureCollection', features: routeFeatures });
+                });
+            } catch (e) {
+                console.error('❌ Error al cargar rutas consolidadas:', e);
+                showToast('No fue posible cargar las rutas consolidadas.', true);
+            }
+        }
+
+        function viewContainerCard(id) {
+            const c = containersData[id];
+            if(!c) return;
+            
+            // Recordar de qué pestaña vinimos (Mapa o Lista) para poder retornar a ella luego
+            document.querySelectorAll('.tab-content').forEach(el => { if(el.classList.contains('active') && el.id !== 'detailTab') previousTab = el.id; });
+            
+            // Mostrar la pestaña Oculta 'detailTab'
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            const detailTab = document.getElementById('detailTab');
+            if (detailTab) {
+                detailTab.style.display = 'flex';
+                detailTab.classList.add('active');
+            }
+
+            const avg = Math.round(c.current_fill_level || 0), offline = isOffline(c.last_updated);
+            const avgClass = offline ? 'bg-gray' : (avg < 40 ? 'bg-green' : (avg <= 70 ? 'bg-yellow' : 'bg-red'));
+            const localTime = c.last_updated ? new Date(c.last_updated + 'Z').toLocaleString() : 'Nunca';
+            
+            // Muestra Foto Real si existe, sino hace Fallback a una imagen de Unsplash genérica
+            const photoUrl = (c.photo_url && c.photo_url.trim() !== "") ? c.photo_url : 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=600&q=80';
+            const address = c.address || 'Dirección no registrada.';
+
+            document.getElementById('singleCardContainer').innerHTML = `
+                <div class="single-card">
+                    <img src="${photoUrl}" alt="Contenedor Soterrado" onerror="this.src='https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=600&q=80'">
+                    <div class="single-card-body">
+                        <h2>${c.name || c.id}</h2>
+                        <div class="info-line"><i class="fas fa-map-marker-alt"></i><span>${address}</span></div>
+                        <div class="info-line"><i class="fas fa-satellite-dish"></i><span style="font-size:13px;">Coord: ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span></div>
+                        <div class="info-line"><i class="fas fa-clock"></i><span>Última señal: ${localTime}</span></div>
+                        <hr style="border:0; border-top:1px solid #eee; margin: 20px 0;">
+                        <h3 style="font-size:16px; margin-bottom:10px;">Niveles de Llenado</h3>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                            <span style="font-size: 15px; font-weight:bold;">Promedio General:</span>
+                            <span class="badge ${avgClass}" style="font-size:14px; padding: 5px 15px;">${offline ? 'Apagado' : avg + '%'}</span>
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <div style="flex:1; background:#f8f9fa; padding:10px; border-radius:8px; text-align:center;"><div style="font-size:12px; color:#888; margin-bottom:5px;">Secc 1</div><div style="font-weight:bold; font-size:16px; color:${getColorForLevel(c.current_fill_sec1, c.last_updated)}">${Math.round(c.current_fill_sec1||0)}%</div></div>
+                            <div style="flex:1; background:#f8f9fa; padding:10px; border-radius:8px; text-align:center;"><div style="font-size:12px; color:#888; margin-bottom:5px;">Secc 2</div><div style="font-weight:bold; font-size:16px; color:${getColorForLevel(c.current_fill_sec2, c.last_updated)}">${Math.round(c.current_fill_sec2||0)}%</div></div>
+                            <div style="flex:1; background:#f8f9fa; padding:10px; border-radius:8px; text-align:center;"><div style="font-size:12px; color:#888; margin-bottom:5px;">Secc 3</div><div style="font-weight:bold; font-size:16px; color:${getColorForLevel(c.current_fill_sec3, c.last_updated)}">${Math.round(c.current_fill_sec3||0)}%</div></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Restaura la pestaña previa grabada en memoria
+        function goBack() {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            const detailTab = document.getElementById('detailTab');
+            if (detailTab) {
+                detailTab.style.display = 'none';
+            }
+            const prev = document.getElementById(previousTab);
+            if (prev) prev.classList.add('active');
+            if(map) setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        // Motor general de Tabs (Ahora todas las secciones son visibles simultáneamente)
+        function switchTab(tabId, btnElement) {
+            // Ya no hace nada - todas las secciones son visibles al mismo tiempo
+            if (btnElement) btnElement.classList.add('active');
+            
+            // Comportamiento móvil: Al hacer clic en un botón, auto-colapsa el menú lateral
+            if(window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.main-sidebar');
+                if (sidebar) sidebar.classList.remove('open');
+                const overlay = document.getElementById('mobile-overlay');
+                if (overlay) overlay.style.display = 'none';
+            }
+            
+            // Scroll suave al elemento
+            if(tabId === 'mapTab' && map) setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        function showToast(msg, isErr=false) {
+            const t = document.getElementById('toast'); t.style.background = isErr ? "var(--danger)" : "var(--secondary)";
+            document.getElementById('toastMsg').innerText = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 4000); 
+        }
+
+        function openPhotoReportsPage() {
+            if (currentUser?.role !== 'admin') {
+                showToast('Solo administrador puede ver la página de reportes.', true);
+                return;
+            }
+            const dashboardPage = document.getElementById('dashboardPage');
+            const photoPage = document.getElementById('photoReportsPage');
+            if (dashboardPage) dashboardPage.style.display = 'none';
+            if (!photoPage) return;
+            photoPage.style.display = 'block';
+            loadPhotoReports();
+            setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 50);
+        }
+
+        function showMainDashboard() {
+            const dashboardPage = document.getElementById('dashboardPage');
+            const photoPage = document.getElementById('photoReportsPage');
+            if (dashboardPage) dashboardPage.style.display = 'block';
+            if (photoPage) photoPage.style.display = 'none';
+            if (map) setTimeout(() => map.invalidateSize(), 100);
+            setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 50);
+        }
+
+        // Dibuja la tabla de contenedores con filas simples
+        function updateTable() {
+            const tbody = document.getElementById('tableBody'); 
+            tbody.innerHTML = ''; 
+            Object.values(containersData).forEach(c => {
+                const avg = Math.round(c.current_fill_level || 0);
+                const offline = isOffline(c.last_updated);
+                const avgClass = offline ? 'bg-gray' : (avg < 40 ? 'bg-green' : (avg <= 70 ? 'bg-yellow' : 'bg-red'));
+                const row = document.createElement('tr');
+                row.style.cursor = 'pointer';
+                row.style.borderLeft = '4px solid ' + (offline ? 'var(--offline)' : (avg < 40 ? 'var(--secondary)' : (avg <= 70 ? 'var(--warning)' : 'var(--danger)')));
+                
+                const nameCell = document.createElement('td');
+                nameCell.innerHTML = `<strong>${c.name}</strong><br><small style="color:#888">${c.id}</small>`;
+                row.appendChild(nameCell);
+                
+                const levelCell = document.createElement('td');
+                levelCell.innerHTML = `<span class="badge ${avgClass}">${offline ? 'Off' : avg + '%'}</span>`;
+                row.appendChild(levelCell);
+                
+                const sectionsCell = document.createElement('td');
+                sectionsCell.innerHTML = `<div style="display:flex; gap:5px; font-size:11px; ${offline ? 'opacity: 0.5;' : ''}">
+                    <span style="background:${offline ? 'var(--offline)' : getColorForLevel(c.current_fill_sec1, c.last_updated)}; color:white; padding:2px 5px; border-radius:3px;">S1: ${Math.round(c.current_fill_sec1 || 0)}%</span>
+                    <span style="background:${offline ? 'var(--offline)' : getColorForLevel(c.current_fill_sec2, c.last_updated)}; color:white; padding:2px 5px; border-radius:3px;">S2: ${Math.round(c.current_fill_sec2 || 0)}%</span>
+                    <span style="background:${offline ? 'var(--offline)' : getColorForLevel(c.current_fill_sec3, c.last_updated)}; color:white; padding:2px 5px; border-radius:3px;">S3: ${Math.round(c.current_fill_sec3 || 0)}%</span>
+                </div>`;
+                row.appendChild(sectionsCell);
+                
+                const actionCell = document.createElement('td');
+                actionCell.innerHTML = `<button class="btn-action" onclick="viewContainerCard('${c.id}')"><i class="fas fa-external-link-alt"></i> Ver</button>`;
+                row.appendChild(actionCell);
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        function getSectorName(container) {
+            const lat = Number(container.lat);
+            const lng = Number(container.lng);
+            if (lat < -10.685 && lng < -76.25) return 'Sector Norte-Oeste';
+            if (lat < -10.685 && lng >= -76.25) return 'Sector Norte-Este';
+            if (lat >= -10.685 && lng < -76.25) return 'Sector Sur-Oeste';
+            return 'Sector Sur-Este';
+        }
+
+        function calculateDistance(a, b) {
+            const toRad = value => value * Math.PI / 180;
+            const R = 6371;
+            const dLat = toRad(b.lat - a.lat);
+            const dLng = toRad(b.lng - a.lng);
+            const lat1 = toRad(a.lat);
+            const lat2 = toRad(b.lat);
+            const sinDLat = Math.sin(dLat / 2);
+            const sinDLng = Math.sin(dLng / 2);
+            const h = sinDLat * sinDLat + sinDLng * sinDLng * Math.cos(lat1) * Math.cos(lat2);
+            return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+        }
+
+        function createGraphKey(lat, lng) {
+            return `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+        }
+
+        function addRoadNode(graph, lat, lng) {
+            const key = createGraphKey(lat, lng);
+            if (!graph.has(key)) {
+                graph.set(key, { key, lat: Number(lat), lng: Number(lng), neighbors: [] });
+            }
+            return graph.get(key);
+        }
+
+        function addRoadEdge(graph, fromLat, fromLng, toLat, toLng) {
+            const fromNode = addRoadNode(graph, fromLat, fromLng);
+            const toNode = addRoadNode(graph, toLat, toLng);
+            const weight = calculateDistance({ lat: fromLat, lng: fromLng }, { lat: toLat, lng: toLng });
+            const alreadyLinked = fromNode.neighbors.some(n => n.to === toNode.key);
+            if (!alreadyLinked) {
+                fromNode.neighbors.push({ to: toNode.key, cost: weight });
+                toNode.neighbors.push({ to: fromNode.key, cost: weight });
+            }
+        }
+
+        function buildRoadGraphFromGeojson(geojson) {
+            if (!geojson || !geojson.features) return;
+            geojson.features.forEach(feature => {
+                const geometry = feature.geometry;
+                if (!geometry) return;
+                if (geometry.type === 'LineString') {
+                    const coords = geometry.coordinates || [];
+                    for (let i = 1; i < coords.length; i++) {
+                        const [fromLng, fromLat] = coords[i - 1];
+                        const [toLng, toLat] = coords[i];
+                        addRoadEdge(roadGraph, fromLat, fromLng, toLat, toLng);
+                    }
+                } else if (geometry.type === 'MultiLineString') {
+                    (geometry.coordinates || []).forEach(line => {
+                        for (let i = 1; i < line.length; i++) {
+                            const [fromLng, fromLat] = line[i - 1];
+                            const [toLng, toLat] = line[i];
+                            addRoadEdge(roadGraph, fromLat, fromLng, toLat, toLng);
+                        }
+                    });
+                }
+            });
+            roadGraphLoaded = roadGraph.size > 0;
+        }
+
+        function findClosestRoadNode(lat, lng) {
+            if (!roadGraphLoaded || roadGraph.size === 0) return null;
+            let best = null;
+            let bestDistance = Infinity;
+            roadGraph.forEach(node => {
+                const distance = calculateDistance({ lat, lng }, { lat: node.lat, lng: node.lng });
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = node;
+                }
+            });
+            return best;
+        }
+
+        function dijkstraOnRoadGraph(startNode, endNode) {
+            if (!startNode || !endNode) return null;
+            const distances = new Map([[startNode.key, 0]]);
+            const previous = new Map();
+            const visited = new Set();
+            const queue = [{ node: startNode, distance: 0 }];
+
+            while (queue.length) {
+                queue.sort((a, b) => a.distance - b.distance);
+                const current = queue.shift();
+                if (!current || visited.has(current.node.key)) continue;
+                visited.add(current.node.key);
+                if (current.node.key === endNode.key) break;
+
+                current.node.neighbors.forEach(neighbor => {
+                    const nextNode = roadGraph.get(neighbor.to);
+                    if (!nextNode || visited.has(nextNode.key)) return;
+                    const candidateDistance = current.distance + neighbor.cost;
+                    const previousDistance = distances.get(nextNode.key) ?? Infinity;
+                    if (candidateDistance < previousDistance) {
+                        distances.set(nextNode.key, candidateDistance);
+                        previous.set(nextNode.key, current.node.key);
+                        queue.push({ node: nextNode, distance: candidateDistance });
+                    }
+                });
+            }
+
+            if (!distances.has(endNode.key)) return null;
+            const pathKeys = [];
+            let cursor = endNode.key;
+            while (cursor) {
+                pathKeys.unshift(cursor);
+                cursor = previous.get(cursor) ?? null;
+            }
+            const pathCoords = pathKeys.map(key => {
+                const node = roadGraph.get(key);
+                return node ? [node.lat, node.lng] : null;
+            }).filter(Boolean);
+            return { distance: distances.get(endNode.key), pathCoords };
+        }
+
+        function estimateTravelCost(fromContainer, toContainer) {
+            const fromNode = findClosestRoadNode(fromContainer.lat, fromContainer.lng);
+            const toNode = findClosestRoadNode(toContainer.lat, toContainer.lng);
+            if (!fromNode || !toNode) return calculateDistance(fromContainer, toContainer);
+            const path = dijkstraOnRoadGraph(fromNode, toNode);
+            if (!path) return calculateDistance(fromContainer, toContainer);
+            const startPenalty = calculateDistance(fromContainer, { lat: fromNode.lat, lng: fromNode.lng });
+            const endPenalty = calculateDistance(toContainer, { lat: toNode.lat, lng: toNode.lng });
+            return startPenalty + endPenalty + path.distance;
+        }
+
+        function generateAlternativeRoute() {
+            const sectorValue = document.getElementById('routeSectorSelect').value;
+            const maxStops = Math.max(3, Math.min(15, Number(document.getElementById('routeStopsInput').value) || 8));
+            const allContainers = Object.values(containersData);
+            if (!allContainers.length) {
+                showToast('Aún no hay contenedores cargados.', true);
+                return;
+            }
+
+            const candidates = allContainers.filter(c => sectorValue === 'all' || getSectorName(c) === sectorValue);
+            if (!candidates.length) {
+                showToast('No hay contenedores para ese sector.', true);
+                return;
+            }
+
+            const ordered = [...candidates].sort((a, b) => (b.current_fill_level || 0) - (a.current_fill_level || 0));
+            const route = [ordered[0]];
+            let current = ordered[0];
+            let remaining = ordered.slice(1);
+
+            while (route.length < maxStops && remaining.length) {
+                let best = null;
+                let bestScore = Infinity;
+                remaining.forEach(item => {
+                    const dist = estimateTravelCost(current, item);
+                    const fillFactor = 1 + ((item.current_fill_level || 0) / 100) * 2.4;
+                    const score = dist / fillFactor;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        best = item;
+                    }
+                });
+                if (!best) break;
+                route.push(best);
+                current = best;
+                remaining = remaining.filter(item => item.id !== best.id);
+            }
+
+            const totalKm = route.slice(1).reduce((acc, item, index) => acc + estimateTravelCost(route[index], item), 0);
+            renderGeneratedRoute(route, sectorValue, totalKm);
+            document.getElementById('routeSummary').innerHTML = `
+                <div class="space-y-2">
+                    <p class="font-semibold text-slate-800">Ruta recomendada (${sectorValue === 'all' ? 'Todos los sectores' : sectorValue})</p>
+                    <p class="text-sm text-slate-600">Paradas: ${route.length} • Estimación de recorrido: ${totalKm.toFixed(1)} km</p>
+                    <ol class="list-decimal list-inside text-sm text-slate-700 space-y-1">
+                        ${route.map((c, idx) => `<li>${idx + 1}. ${c.name || c.id} (${Math.round(c.current_fill_level || 0)}% llenado)</li>`).join('')}
+                    </ol>
+                </div>
+            `;
+            showToast(`Ruta generada con ${route.length} paradas.`, false);
+        }
+
+        function renderGeneratedRoute(route, sectorValue, totalKm) {
+            if (generatedRouteLayer) {
+                map.removeLayer(generatedRouteLayer);
+            }
+            if (!route.length || !map) return;
+
+            generatedRouteLayer = L.layerGroup().addTo(map);
+            const fullRoutePoints = [];
+            for (let i = 0; i < route.length - 1; i++) {
+                const fromNode = findClosestRoadNode(route[i].lat, route[i].lng);
+                const toNode = findClosestRoadNode(route[i + 1].lat, route[i + 1].lng);
+                const path = fromNode && toNode ? dijkstraOnRoadGraph(fromNode, toNode) : null;
+                if (path && path.pathCoords.length) {
+                    if (fullRoutePoints.length === 0) {
+                        fullRoutePoints.push(...path.pathCoords);
+                    } else {
+                        fullRoutePoints.push(...path.pathCoords.slice(1));
+                    }
+                }
+            }
+
+            if (fullRoutePoints.length) {
+                L.polyline(fullRoutePoints, { color: '#2563eb', weight: 6, opacity: 0.8, dashArray: '8,6' }).addTo(generatedRouteLayer);
+                map.fitBounds(fullRoutePoints, { padding: [40, 40] });
+            } else {
+                const latlngs = route.map(c => [c.lat, c.lng]);
+                L.polyline(latlngs, { color: '#2563eb', weight: 6, opacity: 0.8, dashArray: '8,6' }).addTo(generatedRouteLayer);
+                map.fitBounds(latlngs, { padding: [40, 40] });
+            }
+
+            route.forEach((c, index) => {
+                const marker = L.circleMarker([c.lat, c.lng], {
+                    radius: index === 0 ? 8 : 6,
+                    color: index === 0 ? '#f59e0b' : '#2563eb',
+                    fillColor: index === 0 ? '#f59e0b' : '#4f46e5',
+                    fillOpacity: 0.95,
+                    weight: 2
+                }).addTo(generatedRouteLayer);
+                marker.bindPopup(`<div style="min-width:180px"><strong>${c.name || c.id}</strong><br>${Math.round(c.current_fill_level || 0)}% llenado<br>Sector: ${getSectorName(c)}</div>`);
+            });
+            document.getElementById('routeSummary').innerHTML += `<p class="mt-3 text-xs text-slate-500">Mapa actualizado con una ruta basada en la red vial disponible para ${sectorValue === 'all' ? 'todos los sectores' : sectorValue}.</p>`;
+        }
+
+        // Pinta los bloques de información numéricos de la cabecera
+        function updateDashboardStats(stats) {
+            const vals = Object.values(containersData);
+            document.getElementById('stat-total').innerText = stats?.total || vals.length;
+            document.getElementById('stat-online').innerText = vals.filter(c => !isOffline(c.last_updated)).length;
+            document.getElementById('stat-critical').innerText = stats?.critical || vals.filter(c => c.current_fill_level > 80 && !isOffline(c.last_updated)).length;
+            document.getElementById('stat-empties').innerText = stats?.emptiesToday || 0;
+            updateAlertWidgets();
+        }
+
+        function updateAlertWidgets() {
+            const summary = generateAlertSummary(containersData);
+            const criticalEl = document.getElementById('alert-critical-count');
+            const warningEl = document.getElementById('alert-warning-count');
+            const offlineEl = document.getElementById('alert-offline-count');
+            if (criticalEl) criticalEl.innerText = `${summary.criticalCount} críticos`;
+            if (warningEl) warningEl.innerText = `${summary.warningCount} atención`;
+            if (offlineEl) offlineEl.innerText = `${summary.offlineCount} offline`;
+
+            const alertList = document.getElementById('alertList');
+            if (alertList) {
+                alertList.innerHTML = summary.alerts.length
+                    ? summary.alerts.map(alert => `
+                        <li class="${alert.severity}">
+                            <strong>${alert.name}</strong><br>
+                            <span>${alert.message}</span> · ${Math.round(alert.level)}%
+                        </li>`).join('')
+                    : '<li class="warning">Sin alertas activas en este momento.</li>';
+            }
+
+            const recommendation = document.getElementById('recommendedAction');
+            if (recommendation) {
+                const criticalAlert = summary.alerts.find(item => item.severity === 'critical');
+                const offlineAlert = summary.alerts.find(item => item.severity === 'offline');
+                if (criticalAlert) {
+                    recommendation.innerHTML = `<p><strong>Acción prioritaria:</strong> programar una ruta de recolección para <strong>${criticalAlert.name}</strong> antes de que alcance el límite operativo.</p>`;
+                } else if (offlineAlert) {
+                    recommendation.innerHTML = `<p><strong>Acción prioritaria:</strong> verificar la conexión del contenedor <strong>${offlineAlert.name}</strong> y reactivar el envío de datos.</p>`;
+                } else {
+                    recommendation.innerHTML = '<p>El sistema está estable. El siguiente turno puede priorizar la optimización de rutas en sectores de menor carga.</p>';
+                }
+            }
+
+            const routeHealth = document.getElementById('routeHealth');
+            if (routeHealth) {
+                const critical = summary.criticalCount;
+                routeHealth.innerHTML = critical > 0
+                    ? `<p><strong>${critical}</strong> contenedores críticos impactan la ruta recomendada.</p>`
+                    : '<p>Las rutas actuales presentan un estado estable y sin bloqueos críticos.</p>';
+            }
+        }
+
+        function initCharts() {
+            const fillCanvas = document.getElementById('fillChart');
+            const sectionsCanvas = document.getElementById('sectionsChart');
+            const statusCanvas = document.getElementById('statusChart');
+            const trendCanvas = document.getElementById('trendChart');
+
+            if (fillCanvas) {
+                fillChart = new Chart(fillCanvas.getContext('2d'), { type: 'bar', data: { labels: [], datasets: [{ label: 'Promedio (%)', data: [], backgroundColor: [] }] }, options: { responsive: true, maintainAspectRatio: false }});
+            }
+            if (sectionsCanvas) {
+                sectionsChart = new Chart(sectionsCanvas.getContext('2d'), { type: 'bar', data: { labels: [], datasets: [ { label: 'S1', data: [], backgroundColor: '#3498db' }, { label: 'S2', data: [], backgroundColor: '#9b59b6' }, { label: 'S3', data: [], backgroundColor: '#e67e22' } ]}, options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100 } } }});
+            }
+            if (statusCanvas) {
+                statusChart = new Chart(statusCanvas.getContext('2d'), { type: 'doughnut', data: { labels: ['Saludable', 'Atención', 'Crítico', 'Desconectado'], datasets: [{ data: [0,0,0,0], backgroundColor: ['#27AE60', '#F1C40F', '#E74C3C', '#95a5a6'] }] }, options: { responsive: true, maintainAspectRatio: false }});
+            }
+            if (trendCanvas) {
+                trendChart = new Chart(trendCanvas.getContext('2d'), { type: 'line', data: { labels: ['Llenado', 'S1', 'S2', 'S3'], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { suggestedMax: 100 }}}});
+            }
+        }
+
+        function connectLiveStream() {
+            if (typeof EventSource === 'undefined') return;
+            if (liveStream) liveStream.close();
+
+            const eventUrl = API_BASE.replace(/\/api$/, '') + '/api/events/stream';
+            try {
+                liveStream = new EventSource(eventUrl);
+                liveStream.addEventListener('message', () => {});
+                liveStream.addEventListener('telemetry', () => {
+                    fetchRealTimeData();
+                });
+                liveStream.onerror = () => {
+                    if (!liveStreamReconnectTimer) {
+                        liveStreamReconnectTimer = setTimeout(() => {
+                            liveStreamReconnectTimer = null;
+                            connectLiveStream();
+                        }, 15000);
+                    }
+                };
+            } catch (e) {
+                // Si EventSource falla en el navegador, usa polling en su lugar.
+                if (!refreshTimer) {
+                    refreshTimer = setInterval(fetchRealTimeData, 15000);
+                }
+            }
+        }
+
+        // Motor actualizador de Gráficos. Inyecta los arreglos de datos en memoria en los Charts
+        function buildTrendSeries(vals) {
+            const labels = ['Llenado promedio', 'Sección 1', 'Sección 2', 'Sección 3'];
+            const datasets = (vals || []).slice(0, 5).map((container, index) => ({
+                label: container.name || container.id,
+                data: [
+                    Math.round(container.current_fill_level || 0),
+                    Math.round(container.current_fill_sec1 || 0),
+                    Math.round(container.current_fill_sec2 || 0),
+                    Math.round(container.current_fill_sec3 || 0)
+                ],
+                borderColor: ['#2563eb', '#0f766e', '#f59e0b', '#dc2626', '#7c3aed'][index % 5],
+                backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                tension: 0.35,
+                fill: false,
+                pointRadius: 3
+            }));
+            return { labels, datasets };
+        }
+
+        function updateCharts() {
+            const vals = Object.values(containersData), labels = vals.map(c => c.name || c.id);
+            if (fillChart) {
+                fillChart.data.labels = labels; fillChart.data.datasets[0].data = vals.map(c => Math.round(c.current_fill_level || 0)); fillChart.data.datasets[0].backgroundColor = vals.map(c => getColorForLevel(c.current_fill_level, c.last_updated)); fillChart.update();
+            }
+            if (sectionsChart) {
+                sectionsChart.data.labels = labels; sectionsChart.data.datasets[0].data = vals.map(c => Math.round(c.current_fill_sec1 || 0)); sectionsChart.data.datasets[1].data = vals.map(c => Math.round(c.current_fill_sec2 || 0)); sectionsChart.data.datasets[2].data = vals.map(c => Math.round(c.current_fill_sec3 || 0)); sectionsChart.update();
+            }
+            if (statusChart) {
+                let g=0, y=0, r=0, gr=0; vals.forEach(c => { if(isOffline(c.last_updated)) gr++; else if(c.current_fill_level < 40) g++; else if(c.current_fill_level <= 70) y++; else r++; });
+                statusChart.data.datasets[0].data = [g, y, r, gr]; statusChart.update();
+            }
+            if (trendChart) {
+                const trendSeries = buildTrendSeries(vals);
+                trendChart.data.labels = trendSeries.labels;
+                trendChart.data.datasets = trendSeries.datasets;
+                trendChart.update();
+            }
+        }
+
+        // Puebla el formulario (<select>) en la pestaña de Administración
+        function updateAdminDropdown() {
+            const select = document.getElementById('infoContainerSelect'), currentVal = select.value;
+            select.innerHTML = '<option value="">-- Selecciona un Contenedor --</option>';
+            Object.values(containersData).sort((a,b) => (a.name || a.id).localeCompare(b.name || b.id)).forEach(c => { select.innerHTML += `<option value="${c.id}">${c.name || c.id}</option>`; });
+            if(currentVal) select.value = currentVal;
+        }
+
+        // ==========================================
+        // MOTOR DE "POLLING" (REEMPLAZO DIRECTO A WEBSOCKETS)
+        // ==========================================
+        // Pide los datos silenciosamente en bucle constante.
+        async function fetchRealTimeData() {
+            try {
+                // Descarga todo el diccionario de los contenedores
+                const res = await fetch(API_BASE + '/containers'); if(!res.ok) return;
+                const data = await res.json();
+                
+                // Sobrescribe y actualiza el mapa
+                data.forEach(c => { containersData[c.id] = c; updateMarkerOnMap(c); });
+                
+                // Descarga Analíticas calculadas en el Backend
+                const statsRes = await fetch(API_BASE + '/stats'), statsData = await statsRes.json();
+                
+                // Repinta Tablas e Interfaz General
+                updateTable(); updateDashboardStats(statsData); updateAdminDropdown();
+                
+                // EFICIENCIA CPU: Solo renderizar gráficos pesados si el usuario es Admin.
+                updateAlertWidgets();
+                if(currentUser && currentUser.role === 'admin') updateCharts();
+                
+                // HOT-RELOAD DE TARJETAS: Si el usuario tiene una tarjeta abierta de un contenedor, 
+                // esta se actualiza instantáneamente con los datos en vivo.
+                const detailTab = document.getElementById('detailTab');
+                if(detailTab?.classList.contains('active')) {
+                    const currentIdText = document.querySelector('.single-card h2')?.innerText || '';
+                    const containerId = Object.keys(containersData).find(key => (containersData[key].name || key) === currentIdText);
+                    if(containerId) viewContainerCard(containerId);
+                }
+            } catch (e) {}
+        }
+
+        // 🚀 INICIALIZACIÓN AL ABRIR LA VENTANA
+        window.onload = () => { 
+            checkSession(); // Dispara validación de sesión
+            // Todo el navegador usa polling para evitar bloqueos de EventSource en adblock / políticas de seguridad.
+            // connectLiveStream(); // Deshabilitado por defecto en producción porque SSE se puede bloquear.
+            // Previene el colapso del canvas en rotaciones de celulares
+            window.addEventListener('resize', () => { if(map && document.getElementById('mapTab').classList.contains('active')) map.invalidateSize(); }); 
+        };
+    </script>
+</body>
+</html>
